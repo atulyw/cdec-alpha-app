@@ -1,0 +1,160 @@
+# kube-prometheus-stack values for EKS
+# Install: helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#   -n monitoring --create-namespace -f monitoring-values.yaml
+
+fullnameOverride: kube-prometheus-stack
+
+# ---------------------------------------------------------------------------
+# Grafana — only component exposed via Ingress
+# ---------------------------------------------------------------------------
+grafana:
+  enabled: true
+
+  adminUser: admin
+  # CHANGE ME: set a strong password or use an existing secret (see README)
+  adminPassword: CHANGE_ME_STRONG_PASSWORD
+
+  persistence:
+    enabled: true
+    size: 10Gi
+  # storageClassName: gp3   # uncomment and set to your cluster StorageClass
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Required when TLS terminates at ALB — Grafana generates correct redirect/cookie URLs
+  grafana.ini:
+    server:
+      root_url: https://grafana.thecloudnine.in
+      serve_from_sub_path: false
+
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - grafana.thecloudnine.in
+    path: /
+    pathType: Prefix
+    annotations:
+      # ALB — internet-facing, pod IP targets (EKS)
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/backend-protocol: HTTP
+
+      # ACM TLS — certificate MUST be in the same region as the ALB (eu-west-1)
+      # Must cover grafana.thecloudnine.in (wildcard *.thecloudnine.in or SAN)
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:933516006319:certificate/dab4d476-ddf2-40ef-ae09-0d3ced0e76e1
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/ssl-redirect: "443"
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+
+      # Health checks — Grafana exposes /api/health
+      alb.ingress.kubernetes.io/healthcheck-path: /api/health
+      alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+      alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+      alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+      # Optional: attach to the same ALB as api.thecloudnine.in (IngressGroup)
+      # alb.ingress.kubernetes.io/group.name: cdec-alpha-alb
+      # alb.ingress.kubernetes.io/group.order: "20"
+    tls:
+      - hosts:
+          - grafana.thecloudnine.in
+
+  # Optional: pre-install useful dashboards
+  defaultDashboardsEnabled: true
+
+# ---------------------------------------------------------------------------
+# Prometheus — internal only (no Ingress)
+# ---------------------------------------------------------------------------
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 45GB
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2
+        memory: 4Gi
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+          # storageClassName: gp3
+
+    # Scrape all ServiceMonitors/PodMonitors cluster-wide
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    # Restrict external access — ClusterIP only (default)
+    externalUrl: ""
+
+# ---------------------------------------------------------------------------
+# Alertmanager — internal only (no Ingress)
+# ---------------------------------------------------------------------------
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+          # storageClassName: gp3
+
+# ---------------------------------------------------------------------------
+# Exporters and operator
+# ---------------------------------------------------------------------------
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+prometheusOperator:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# Disable components not needed on managed EKS control plane
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: true
