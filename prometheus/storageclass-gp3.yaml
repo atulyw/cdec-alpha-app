@@ -1,0 +1,24 @@
+# EBS CSI StorageClass for EKS 1.23+
+# Requires: aws-ebs-csi-driver addon
+#
+#   aws eks create-addon \
+#     --cluster-name cdec-eks-dev \
+#     --addon-name aws-ebs-csi-driver \
+#     --region eu-west-1
+#
+# Apply:
+#   kubectl apply -f storageclass-gp3.yaml
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  fsType: ext4
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete

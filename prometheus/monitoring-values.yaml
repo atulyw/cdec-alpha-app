@@ -17,7 +17,7 @@ grafana:
   persistence:
     enabled: true
     size: 10Gi
-  # storageClassName: gp3   # uncomment and set to your cluster StorageClass
+    storageClassName: gp3   # apply storageclass-gp3.yaml after installing aws-ebs-csi-driver
 
   resources:
     requests:
@@ -48,7 +48,7 @@ grafana:
 
       # ACM TLS — certificate MUST be in the same region as the ALB (eu-west-1)
       # Must cover grafana.thecloudnine.in (wildcard *.thecloudnine.in or SAN)
-      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:933516006319:certificate/dab4d476-ddf2-40ef-ae09-0d3ced0e76e1
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-1:933516006319:certificate/792f032f-04d9-46b5-b801-d53bea02d14c
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
       alb.ingress.kubernetes.io/ssl-redirect: "443"
       alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
@@ -93,10 +93,10 @@ prometheus:
       volumeClaimTemplate:
         spec:
           accessModes: ["ReadWriteOnce"]
+          storageClassName: gp3
           resources:
             requests:
               storage: 50Gi
-          # storageClassName: gp3
 
     # Scrape all ServiceMonitors/PodMonitors cluster-wide
     serviceMonitorSelectorNilUsesHelmValues: false
@@ -125,10 +125,10 @@ alertmanager:
       volumeClaimTemplate:
         spec:
           accessModes: ["ReadWriteOnce"]
+          storageClassName: gp3
           resources:
             requests:
               storage: 5Gi
-          # storageClassName: gp3
 
 # ---------------------------------------------------------------------------
 # Exporters and operator

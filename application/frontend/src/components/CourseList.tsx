@@ -1,34 +1,49 @@
 import React, { useState, useEffect } from 'react';
+import { BookOpen, Clock, User, Plus, Cloud, Container, Cog, RefreshCw } from 'lucide-react';
 import { courseApi, enrollApi } from '../utils/api';
+import { useToast } from '../contexts/ToastContext';
+import { EmptyState } from './ui/EmptyState';
 
 export interface Course {
   id: string;
   title: string;
   description: string;
   instructor: string;
-  duration: number; // in hours
+  duration: number;
   price: number;
 }
+
+const courseIcons = [
+  { match: 'aws', icon: Cloud, color: 'text-orange-500' },
+  { match: 'docker', icon: Container, color: 'text-blue-500' },
+  { match: 'kubernetes', icon: Cog, color: 'text-indigo-500' },
+];
+
+const getCourseMeta = (title: string) => {
+  const found = courseIcons.find((c) => title.toLowerCase().includes(c.match));
+  return found ?? { icon: BookOpen, color: 'text-violet-500' };
+};
 
 export const CourseList: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [enrolling, setEnrolling] = useState<string | null>(null);
+  const { showToast } = useToast();
 
-  useEffect(() => {
-    fetchCourses();
-  }, []);
+  useEffect(() => { fetchCourses(); }, []);
 
   const fetchCourses = async () => {
+    setLoading(true);
     try {
       const response = await courseApi.get<Course[]>('/');
       if (response.success && response.data) {
         setCourses(response.data);
+        setError('');
       } else {
         setError(response.error || 'Failed to fetch courses');
       }
-    } catch (error) {
+    } catch {
       setError('Failed to fetch courses');
     } finally {
       setLoading(false);
@@ -40,130 +55,103 @@ export const CourseList: React.FC = () => {
     try {
       const response = await enrollApi.post<{ message: string }>('/', { courseId });
       if (response.success) {
-        alert('Successfully enrolled in the course!');
+        showToast('Successfully enrolled in the course!', 'success');
       } else {
-        alert(response.error || 'Failed to enroll in the course');
+        showToast(response.error || 'Failed to enroll in the course', 'error');
       }
-    } catch (error) {
-      alert('Failed to enroll in the course');
+    } catch {
+      showToast('Failed to enroll in the course', 'error');
     } finally {
       setEnrolling(null);
     }
   };
 
-  const getCourseIcon = (title: string) => {
-    if (title.toLowerCase().includes('aws')) return '☁️';
-    if (title.toLowerCase().includes('docker')) return '🐳';
-    if (title.toLowerCase().includes('kubernetes')) return '⚙️';
-    return '📚';
-  };
-
-  const getCourseGradient = (index: number) => {
-    const gradients = [
-      'from-blue-500 to-blue-600',
-      'from-purple-500 to-purple-600',
-      'from-green-500 to-green-600',
-      'from-orange-500 to-orange-600',
-      'from-pink-500 to-pink-600',
-      'from-indigo-500 to-indigo-600'
-    ];
-    return gradients[index % gradients.length];
-  };
-
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="text-center">
-          <div className="spinner h-12 w-12 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading courses...</p>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="card p-6">
+            <div className="skeleton h-10 w-10 rounded-lg mb-4" />
+            <div className="skeleton h-5 w-3/4 mb-2" />
+            <div className="skeleton h-4 w-full mb-1" />
+            <div className="skeleton h-4 w-2/3 mb-6" />
+            <div className="skeleton h-10 w-full rounded-lg" />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <div className="card p-8 max-w-md mx-auto">
-          <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-            <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load courses</h3>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={fetchCourses}
-            className="btn btn-primary btn-md"
-          >
-            Try Again
-          </button>
-        </div>
+      <div className="card p-8 text-center max-w-md mx-auto">
+        <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>{error}</p>
+        <button onClick={fetchCourses} className="btn btn-primary btn-md">
+          <RefreshCw className="h-4 w-4" /> Try Again
+        </button>
       </div>
     );
   }
 
+  if (courses.length === 0) {
+    return (
+      <EmptyState
+        icon={BookOpen}
+        title="No courses available"
+        description="Check back later for new cloud computing courses."
+        action={{ label: 'Refresh', onClick: fetchCourses }}
+      />
+    );
+  }
+
   return (
-    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-      {courses.map((course, index) => (
-        <div key={course.id} className="card-hover p-6 animate-slide-up" style={{ animationDelay: `${index * 100}ms` }}>
-          {/* Course Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className={`h-12 w-12 bg-gradient-to-r ${getCourseGradient(index)} rounded-xl flex items-center justify-center text-white text-xl shadow-lg`}>
-              {getCourseIcon(course.title)}
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-gray-900">${course.price}</div>
-              <div className="text-sm text-gray-500">One-time</div>
-            </div>
-          </div>
-
-          {/* Course Content */}
-          <div className="mb-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-3 line-clamp-2">{course.title}</h3>
-            <p className="text-gray-600 text-sm leading-relaxed mb-4 line-clamp-3">{course.description}</p>
-            
-            {/* Course Details */}
-            <div className="space-y-3">
-              <div className="flex items-center text-sm text-gray-500">
-                <svg className="h-4 w-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="font-medium">Instructor:</span>
-                <span className="ml-1">{course.instructor}</span>
-              </div>
-              <div className="flex items-center text-sm text-gray-500">
-                <svg className="h-4 w-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="font-medium">Duration:</span>
-                <span className="ml-1">{course.duration} hours</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Enroll Button */}
-          <button
-            onClick={() => handleEnroll(course.id)}
-            disabled={enrolling === course.id}
-            className="btn btn-primary btn-lg w-full"
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {courses.map((course, index) => {
+        const { icon: Icon, color } = getCourseMeta(course.title);
+        return (
+          <div
+            key={course.id}
+            className="card card-hover p-6 animate-slide-up flex flex-col"
+            style={{ animationDelay: `${index * 60}ms` }}
           >
-            {enrolling === course.id ? (
-              <div className="flex items-center justify-center">
-                <div className="spinner h-4 w-4 mr-2"></div>
-                Enrolling...
+            <div className="flex items-start justify-between mb-4">
+              <div className={`p-2.5 rounded-lg bg-[var(--surface-bg)] ${color}`}>
+                <Icon className="h-5 w-5" />
               </div>
-            ) : (
-              <div className="flex items-center justify-center">
-                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Enroll Now
+              <div className="text-right">
+                <span className="text-xl font-bold font-mono" style={{ color: 'var(--text-primary)' }}>
+                  ${course.price}
+                </span>
+                <p className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>One-time</p>
               </div>
-            )}
-          </button>
-        </div>
-      ))}
+            </div>
+
+            <h3 className="text-base font-semibold mb-2 line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+              {course.title}
+            </h3>
+            <p className="text-sm mb-4 line-clamp-3 flex-1" style={{ color: 'var(--text-secondary)' }}>
+              {course.description}
+            </p>
+
+            <div className="flex items-center gap-4 text-xs mb-5" style={{ color: 'var(--text-muted)' }}>
+              <span className="flex items-center gap-1"><User className="h-3.5 w-3.5" />{course.instructor}</span>
+              <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{course.duration}h</span>
+            </div>
+
+            <button
+              onClick={() => handleEnroll(course.id)}
+              disabled={enrolling === course.id}
+              className="btn btn-primary btn-md w-full"
+            >
+              {enrolling === course.id ? (
+                <><div className="spinner h-4 w-4" /> Enrolling...</>
+              ) : (
+                <><Plus className="h-4 w-4" /> Enroll Now</>
+              )}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Cloud } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -10,23 +11,25 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen gradient-auth flex items-center justify-center">
+        <div className="text-center">
+          <Cloud className="h-8 w-8 text-blue-400 mx-auto mb-4 animate-pulse-subtle" />
+          <div className="spinner h-10 w-10 mx-auto" />
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h2>
-          <p className="text-gray-600 mb-4">You need to be logged in to access this page.</p>
-          <button
-            onClick={() => window.location.href = '/login'}
-            className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-          >
-            Go to Login
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: 'var(--surface-bg)' }}>
+        <div className="card p-8 text-center max-w-sm">
+          <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Access Denied</h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+            You need to be signed in to access the control plane.
+          </p>
+          <button onClick={() => window.location.reload()} className="btn btn-primary btn-md w-full">
+            Go to Sign In
           </button>
         </div>
       </div>
