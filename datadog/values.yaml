@@ -1,42 +1,35 @@
-# Datadog Agent Helm values — production-oriented EKS configuration
-# Install: helm install datadog-agent datadog/datadog -n datadog -f values.yaml
-
 datadog:
-  site: datadoghq.eu
-
-  apiKeyExistingSecret: datadog-secret
-
+  site: "datadoghq.com"
+  clusterName: "cdec-eks-dev"
+  apiKeyExistingSecret: "datadog-secret"
+  clusterChecks:
+    enabled: true
+  orchestratorExplorer:
+    enabled: true
+  apm:
+    instrumentation:
+      enabled: true
+      targets:
+        - name: "default-target"
+          ddTraceVersions:
+            java: "1"
+            python: "4"
+            js: "5"
+            php: "1"
+            dotnet: "3"
+            ruby: "2"
+          ddTraceConfigs:
+            - name: "DD_RUM_ENABLED"
+              value: "true"
+            - name: "DD_RUM_APPLICATION_ID"
+              value: "0365c10d-a5e4-4ae0-bab5-42613f4655e4"
+            - name: "DD_RUM_CLIENT_TOKEN"
+              value: "pub40e36e6e850702198824c95dae495f1b"
+            - name: "DD_RUM_REMOTE_CONFIGURATION_ID"
+              value: "68618077-de0e-43e9-9097-c1f1f5a81c7c"
+            - name: "DD_RUM_SITE"
+              value: "datadoghq.com"
   logs:
     enabled: true
     containerCollectAll: true
-
-  processAgent:
-    enabled: true
-
-  networkMonitoring:
-    enabled: true
-
-  orchestratorExplorer:
-    enabled: true
-
-  kubeStateMetricsEnabled: true
-
-  clusterChecks:
-    enabled: true
-
-  prometheusScrape:
-    enabled: true
-
-  admissionController:
-    enabled: true
-
-  operator:
-    enabled: false
-
-clusterAgent:
-  enabled: true
-
-  replicas: 2
-
-  pdb:
-    create: true
+registry: "public.ecr.aws/datadog"
