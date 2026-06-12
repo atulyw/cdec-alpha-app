@@ -1,0 +1,42 @@
+# Datadog Agent Helm values — production-oriented EKS configuration
+# Install: helm install datadog-agent datadog/datadog -n datadog -f values.yaml
+
+datadog:
+  site: datadoghq.eu
+
+  apiKeyExistingSecret: datadog-secret
+
+  logs:
+    enabled: true
+    containerCollectAll: true
+
+  processAgent:
+    enabled: true
+
+  networkMonitoring:
+    enabled: true
+
+  orchestratorExplorer:
+    enabled: true
+
+  kubeStateMetricsEnabled: true
+
+  clusterChecks:
+    enabled: true
+
+  prometheusScrape:
+    enabled: true
+
+  admissionController:
+    enabled: true
+
+  operator:
+    enabled: false
+
+clusterAgent:
+  enabled: true
+
+  replicas: 2
+
+  pdb:
+    create: true
