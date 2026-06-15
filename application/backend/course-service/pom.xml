@@ -37,6 +37,9 @@
         <!-- Tell SonarCloud to read coverage from JaCoCo XML produced during verify -->
         <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
         <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
+        <!-- Fail the build when the SonarCloud quality gate does not pass (all A ratings required) -->
+        <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
     </properties>
 
     <dependencies>

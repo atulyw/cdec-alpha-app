@@ -111,16 +111,94 @@ kubectl rollout status deployment/course-service -n ${KUBE_NAMESPACE} --timeout=
 ```bash
 ./mvnw test              # run unit tests
 ./mvnw clean package     # build with tests
+./mvnw clean verify      # build, test, and generate JaCoCo coverage report
 ```
+
+## SonarCloud Integration
+
+Static analysis, code coverage, and a **quality gate** for `course-service` are integrated via **Maven**, **JaCoCo**, and **SonarCloud**.
+
+The pipeline **passes only when every SonarCloud rating is A**; any lower rating fails the build and blocks Docker deploy.
+
+### Prerequisites
+
+| Requirement | Notes |
+|-------------|-------|
+| [SonarCloud](https://sonarcloud.io) account | Free for public repositories |
+| SonarCloud project | Key: `atulyw_course-service`, org: `atulyw` |
+| Custom quality gate | **All A Ratings** — see setup below |
+| Java 17 | Same as local development |
+| Maven | Use `./mvnw` in this directory |
+
+### Quality gate — all A ratings required
+
+Create a quality gate in SonarCloud and assign it to this project.
+
+1. SonarCloud → **Quality Gates** → **Create**
+2. Name it e.g. `All A Ratings`
+3. Add these conditions (all must pass):
+
+| Condition | Operator | Value |
+|-----------|----------|-------|
+| Reliability Rating | is | A |
+| Security Rating | is | A |
+| Maintainability Rating | is | A |
+| Security Review Rating | is | A |
+
+4. **Quality Gates** → **Projects** → assign `atulyw_course-service` to `All A Ratings`
+
+When any rating drops below **A**, SonarCloud marks the quality gate as **Failed**. With `sonar.qualitygate.wait=true`, Maven exits with an error and Jenkins stops before the Docker/ECR/EKS stages.
+
+### Run analysis locally
+
+```bash
+cd application/backend/course-service
+
+# 1. Build, run tests, and generate JaCoCo XML (target/site/jacoco/jacoco.xml)
+./mvnw clean verify
+
+# 2. Upload analysis and wait for quality gate result
+export SONAR_TOKEN="your-sonar-token"
+./mvnw sonar:sonar \
+  -Dsonar.organization=atulyw \
+  -Dsonar.projectKey=atulyw_course-service \
+  -Dsonar.qualitygate.wait=true
+```
+
+> **Security:** Never commit tokens. Store them in Jenkins credentials or a local environment variable only.
+
+### Jenkins pipeline
+
+Pipeline: [`Jenkinsfile`](Jenkinsfile)
+
+| Stage | Action |
+|-------|--------|
+| Build and Unit Tests | `./mvnw clean verify` (JaCoCo report) |
+| SonarCloud Analysis | `./mvnw sonar:sonar` — **fails if quality gate not all A** |
+| Build Docker image | Runs only after SonarCloud passes |
+| Push to ECR / Deploy to EKS | Runs only after SonarCloud passes |
+
+Jenkins credential: `sonarcloud-token` → `SONAR_TOKEN`
+
+View ratings and gate status on the [SonarCloud project dashboard](https://sonarcloud.io/project/overview?id=atulyw_course-service).
+
+### Configuration files
+
+| File | Purpose |
+|------|---------|
+| `pom.xml` | JaCoCo plugin, SonarScanner plugin, `sonar.qualitygate.wait=true` |
+| `sonar-project.properties` | SonarCloud project settings and quality gate wait flag |
 
 ## Project structure
 
 ```text
 course-service/
-├── src/main/java/       # Application code
+├── src/main/java/            # Application code
 ├── src/main/resources/
-│   └── application.yml  # Port and MongoDB config
+│   └── application.yml       # Port and MongoDB config
+├── sonar-project.properties  # SonarCloud settings and quality gate
+├── Jenkinsfile               # CI: build, SonarCloud gate, deploy
 ├── pom.xml
-├── mvnw                 # Maven wrapper
-└── target/              # Build output (created by mvnw package)
+├── mvnw                      # Maven wrapper
+└── target/                   # Build output (created by mvnw package)
 ```
