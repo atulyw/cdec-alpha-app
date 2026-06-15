@@ -20,12 +20,23 @@
 
     <properties>
         <java.version>17</java.version>
+
+        <!-- JaCoCo version used for unit test coverage reports consumed by SonarCloud -->
+        <jacoco.version>0.8.12</jacoco.version>
+
+        <!--
+          SonarCloud defaults (placeholders). Override locally or in CI:
+            -Dsonar.organization=your-org
+            -Dsonar.projectKey=your-project-key
+          Or set environment variables before running mvn sonar:sonar.
+        -->
         <sonar.organization>atulyw</sonar.organization>
-        <sonar.projectKey>atulyw_cdec</sonar.projectKey>
-        <sonar.projectName>course-service</sonar.projectName>
-        <sonar.projectVersion>1.0.0</sonar.projectVersion>
-        <sonar.sources>src/main/java</sonar.sources>
-        <sonar.java.binaries>target/classes</sonar.java.binaries>
+        <sonar.projectKey>atulyw_course-service</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+
+        <!-- Tell SonarCloud to read coverage from JaCoCo XML produced during verify -->
+        <sonar.java.coveragePlugin>jacoco</sonar.java.coveragePlugin>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <dependencies>
@@ -62,12 +73,41 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            
-            <!-- SonarCloud Maven Plugin -->
+
+            <!--
+              JaCoCo: instruments bytecode during tests and writes an XML report for SonarCloud.
+              prepare-agent — attaches the JaCoCo agent before unit tests run.
+              report        — generates target/site/jacoco/jacoco.xml on the verify phase.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+              SonarScanner for Maven — invoked explicitly (mvn verify sonar:sonar), not bound to a lifecycle phase.
+              Keeps normal builds unchanged; analysis runs only when the sonar goal is requested.
+            -->
             <plugin>
                 <groupId>org.sonarsource.scanner.maven</groupId>
                 <artifactId>sonar-maven-plugin</artifactId>
-                <version>3.9.1.2184</version>
+                <version>4.0.0.4121</version>
             </plugin>
         </plugins>
     </build>
