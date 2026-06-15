@@ -1,27 +1,62 @@
-// Course service deploy pipeline — build Docker image, push to ECR, roll out to EKS
+// Course service pipeline — build, test, SonarCloud, Docker, ECR, EKS
 //
-// Jenkins agent needs: Docker, AWS CLI, kubectl
-// AWS credential in Jenkins (e.g. aws-frontend-terraform):
-//   ecr:GetAuthorizationToken, ecr:BatchCheckLayerAvailability, ecr:PutImage, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload
-//   eks:DescribeCluster (for update-kubeconfig)
+// Jenkins agent needs: Java 17, Docker, AWS CLI, kubectl
+//
+// Jenkins credentials (Manage Jenkins → Credentials):
+//   sonarcloud-token        — Secret text: SonarCloud user token (SONAR_TOKEN)
+//   aws-frontend-terraform  — AWS access key for ECR/EKS
+//
+// SonarCloud organization and project key are defined in sonar-project.properties.
+//
 // EKS access: IAM principal must be in infrastructure/backend terraform.tfvars
-//   cluster_admin_principal_arns (see backend README — kubectl access)
+//   include_caller_as_cluster_admin (see backend README — kubectl access)
 
 pipeline {
     agent {
         label 'terraform'
     }
-    
+
     environment {
-        EKS_CLUSTER = 'cdec-eks-dev'
-        EKS_REGION = 'eu-west-1'
+        APP_DIR      = 'application/backend/course-service'
+        EKS_CLUSTER  = 'cdec-eks-dev'
+        EKS_REGION   = 'eu-west-1'
+        ECR_REGISTRY = '933516006319.dkr.ecr.eu-west-1.amazonaws.com'
+        IMAGE        = '933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/course-service:latest'
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/atulyw/cdec-alpha-app.git', branch: 'main'
+                git url: 'https://github.com/atulyw/cdec-alpha-app.git', branch: 'sonarcloud'
+            }
+        }
+
+        // verify = compile + unit tests + JaCoCo XML (target/site/jacoco/jacoco.xml)
+        stage('Build and Unit Tests') {
+            steps {
+                dir(env.APP_DIR) {
+                    sh './mvnw -B clean verify'
+                }
+            }
+        }
+
+        // Uploads sources, test results, and JaCoCo coverage to SonarCloud
+        stage('SonarCloud Analysis') {
+            steps {
+                dir(env.APP_DIR) {
+                    // Full git history improves SonarCloud blame and issue tracking
+                    sh 'git fetch --unshallow 2>/dev/null || true'
+                    withCredentials([
+                        string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN'),
+                    ]) {
+                        sh '''
+                            ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                -Dsonar.organization=atulyw \
+                                -Dsonar.projectKey=atulyw_course-service
+                        '''
+                    }
+                }
             }
         }
 
@@ -30,10 +65,8 @@ pipeline {
                 label 'master'
             }
             steps {
-                dir('application/backend/course-service') {
-                    sh '''
-                        docker build -t 933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/course-service:latest .
-                    '''
+                dir(env.APP_DIR) {
+                    sh "docker build -t ${IMAGE} ."
                 }
             }
         }
@@ -49,12 +82,12 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    sh '''
-                        export AWS_DEFAULT_REGION=eu-west-1
-                        aws ecr get-login-password --region eu-west-1 | \
-                            docker login --username AWS --password-stdin 933516006319.dkr.ecr.eu-west-1.amazonaws.com
-                        docker push 933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/course-service:latest
-                    '''
+                    sh """
+                        export AWS_DEFAULT_REGION=${EKS_REGION}
+                        aws ecr get-login-password --region ${EKS_REGION} | \\
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        docker push ${IMAGE}
+                    """
                 }
             }
         }
@@ -67,15 +100,15 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    dir('application/backend/course-service') {
-                        sh '''
+                    dir(env.APP_DIR) {
+                        sh """
                             export AWS_DEFAULT_REGION=${EKS_REGION}
                             aws eks update-kubeconfig --region ${EKS_REGION} --name ${EKS_CLUSTER}
 
                             kubectl apply -f k8s/deployment.yml -n default
                             kubectl rollout restart deployment/course-service -n default
                             kubectl rollout status deployment/course-service -n default --timeout=300s
-                        '''
+                        """
                     }
                 }
             }
@@ -84,10 +117,10 @@ pipeline {
 
     post {
         success {
-            echo 'course-service deployed successfully!'
+            echo 'course-service built, analyzed, and deployed successfully!'
         }
         failure {
-            echo 'course-service deployment failed. Check the stage logs above.'
+            echo 'course-service pipeline failed. Check the stage logs above.'
         }
     }
 }
