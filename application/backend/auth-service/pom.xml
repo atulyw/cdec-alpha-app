@@ -30,8 +30,8 @@
             -Dsonar.projectKey=your-project-key
           Or set environment variables before running mvn sonar:sonar.
         -->
-        <sonar.organization>SONAR_ORGANIZATION</sonar.organization>
-        <sonar.projectKey>SONAR_PROJECT_KEY</sonar.projectKey>
+        <sonar.organization>atulyw</sonar.organization>
+        <sonar.projectKey>atulyw_auth-service</sonar.projectKey>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
 
         <!-- Tell SonarCloud to read coverage from JaCoCo XML produced during verify -->

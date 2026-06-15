@@ -53,7 +53,7 @@ pipeline {
                         sh '''
                             ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                                 -Dsonar.organization=atulyw \
-                                -Dsonar.projectKey=auth-service
+                                -Dsonar.projectKey=atulyw_auth-service
                         '''
                     }
                 }
