@@ -1,20 +1,27 @@
-// Auth service deploy pipeline — build Docker image, push to ECR, roll out to EKS
+// Auth service pipeline — build, test, SonarCloud, Docker, ECR, EKS
 //
-// Jenkins agent needs: Docker, AWS CLI, kubectl
-// AWS credential in Jenkins (e.g. aws-frontend-terraform):
-//   ecr:GetAuthorizationToken, ecr:BatchCheckLayerAvailability, ecr:PutImage, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload
-//   eks:DescribeCluster (for update-kubeconfig)
+// Jenkins agent needs: Java 17, Docker, AWS CLI, kubectl
+//
+// Jenkins credentials (Manage Jenkins → Credentials):
+//   sonarcloud-token        — Secret text: SonarCloud user token (SONAR_TOKEN)
+//   sonarcloud-organization — Secret text: SonarCloud organization key
+//   sonarcloud-project-key  — Secret text: SonarCloud project key for auth-service
+//   aws-frontend-terraform  — AWS access key for ECR/EKS
+//
 // EKS access: IAM principal must be in infrastructure/backend terraform.tfvars
-//   cluster_admin_principal_arns (see backend README — kubectl access)
+//   include_caller_as_cluster_admin (see backend README — kubectl access)
 
 pipeline {
     agent {
         label 'terraform'
     }
-    
+
     environment {
-        EKS_CLUSTER = 'cdec-eks-dev'
-        EKS_REGION = 'eu-west-1'
+        APP_DIR      = 'application/backend/auth-service'
+        EKS_CLUSTER  = 'cdec-eks-dev'
+        EKS_REGION   = 'eu-west-1'
+        ECR_REGISTRY = '933516006319.dkr.ecr.eu-west-1.amazonaws.com'
+        IMAGE        = '933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/auth-service:latest'
     }
 
     stages {
@@ -25,15 +32,43 @@ pipeline {
             }
         }
 
+        // verify = compile + unit tests + JaCoCo XML (target/site/jacoco/jacoco.xml)
+        stage('Build and Unit Tests') {
+            steps {
+                dir(env.APP_DIR) {
+                    sh './mvnw -B clean verify'
+                }
+            }
+        }
+
+        // Uploads sources, test results, and JaCoCo coverage to SonarCloud
+        stage('SonarCloud Analysis') {
+            steps {
+                dir(env.APP_DIR) {
+                    // Full git history improves SonarCloud blame and issue tracking
+                    sh 'git fetch --unshallow 2>/dev/null || true'
+                    withCredentials([
+                        string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN'),
+                        string(credentialsId: 'sonarcloud-organization', variable: 'SONAR_ORGANIZATION'),
+                        string(credentialsId: 'sonarcloud-project-key', variable: 'SONAR_PROJECT_KEY'),
+                    ]) {
+                        sh '''
+                            ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                -Dsonar.organization="${SONAR_ORGANIZATION}" \
+                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Build Docker image') {
             agent {
                 label 'master'
             }
             steps {
-                dir('application/backend/auth-service') {
-                    sh '''
-                        docker build -t 933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/auth-service:latest .
-                    '''
+                dir(env.APP_DIR) {
+                    sh "docker build -t ${IMAGE} ."
                 }
             }
         }
@@ -49,12 +84,12 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    sh '''
-                        export AWS_DEFAULT_REGION=eu-west-1
-                        aws ecr get-login-password --region eu-west-1 | \
-                            docker login --username AWS --password-stdin 933516006319.dkr.ecr.eu-west-1.amazonaws.com
-                        docker push 933516006319.dkr.ecr.eu-west-1.amazonaws.com/backend/auth-service:latest
-                    '''
+                    sh """
+                        export AWS_DEFAULT_REGION=${EKS_REGION}
+                        aws ecr get-login-password --region ${EKS_REGION} | \\
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                        docker push ${IMAGE}
+                    """
                 }
             }
         }
@@ -67,15 +102,15 @@ pipeline {
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
-                    dir('application/backend/auth-service') {
-                        sh '''
+                    dir(env.APP_DIR) {
+                        sh """
                             export AWS_DEFAULT_REGION=${EKS_REGION}
                             aws eks update-kubeconfig --region ${EKS_REGION} --name ${EKS_CLUSTER}
 
                             kubectl apply -f k8s/deployment.yml -n default
                             kubectl rollout restart deployment/auth-service -n default
                             kubectl rollout status deployment/auth-service -n default --timeout=300s
-                        '''
+                        """
                     }
                 }
             }
@@ -84,10 +119,10 @@ pipeline {
 
     post {
         success {
-            echo 'auth-service deployed successfully!'
+            echo 'auth-service built, analyzed, and deployed successfully!'
         }
         failure {
-            echo 'auth-service deployment failed. Check the stage logs above.'
+            echo 'auth-service pipeline failed. Check the stage logs above.'
         }
     }
 }
