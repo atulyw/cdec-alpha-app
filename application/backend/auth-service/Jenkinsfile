@@ -4,9 +4,9 @@
 //
 // Jenkins credentials (Manage Jenkins → Credentials):
 //   sonarcloud-token        — Secret text: SonarCloud user token (SONAR_TOKEN)
-//   sonarcloud-organization — Secret text: SonarCloud organization key
-//   sonarcloud-project-key  — Secret text: SonarCloud project key for auth-service
 //   aws-frontend-terraform  — AWS access key for ECR/EKS
+//
+// SonarCloud organization and project key are defined in sonar-project.properties.
 //
 // EKS access: IAM principal must be in infrastructure/backend terraform.tfvars
 //   include_caller_as_cluster_admin (see backend README — kubectl access)
@@ -28,7 +28,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/atulyw/cdec-alpha-app.git', branch: 'main'
+                git url: 'https://github.com/atulyw/cdec-alpha-app.git', branch: 'sonarcloud'
             }
         }
 
@@ -49,13 +49,11 @@ pipeline {
                     sh 'git fetch --unshallow 2>/dev/null || true'
                     withCredentials([
                         string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN'),
-                        string(credentialsId: 'sonarcloud-organization', variable: 'SONAR_ORGANIZATION'),
-                        string(credentialsId: 'sonarcloud-project-key', variable: 'SONAR_PROJECT_KEY'),
                     ]) {
                         sh '''
                             ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                                -Dsonar.organization="${SONAR_ORGANIZATION}" \
-                                -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
+                                -Dsonar.organization=atulyw \
+                                -Dsonar.projectKey=auth-service
                         '''
                     }
                 }
